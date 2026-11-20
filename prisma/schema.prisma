@@ -1,0 +1,630 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  CHALLENGE_MANAGER
+  PARTICIPANT_MANAGER
+  JUDGE_MANAGER
+  RESULTS_MANAGER
+  VOTING_MANAGER
+  JUDGE
+  PARTICIPANT
+  PUBLIC_USER
+}
+
+enum AccountStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  RESTRICTED
+}
+
+enum ChallengeStatus {
+  DRAFT
+  UPCOMING
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  STARTING_SOON
+  LIVE
+  SUBMISSION_OPEN
+  SUBMISSION_CLOSED
+  UNDER_EVALUATION
+  RESULTS_PUBLISHED
+  COMPLETED
+  ARCHIVED
+}
+
+enum DurationType {
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+  CUSTOM
+}
+
+enum HackathonFormat {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REVIEW
+  CANCELLED
+  REJECTED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_EVALUATION
+  REVISION_REQUESTED
+  EVALUATED
+  REPORTED
+}
+
+enum EvaluationStatus {
+  ASSIGNED
+  PENDING_REVIEW
+  IN_PROGRESS
+  DRAFT_SAVED
+  SUBMITTED
+  COMPLETED
+  REOPENED
+  OVERDUE
+  CANCELLED
+}
+
+enum NominationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SHORTLISTED
+  FINALIST
+  WINNER
+}
+
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+}
+
+model User {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  passwordHash  String
+  name          String
+  firstName     String?
+  lastName      String?
+  role          UserRole      @default(PARTICIPANT)
+  accountStatus AccountStatus @default(ACTIVE)
+  avatarInitials String?      @default("PB")
+  bio           String?
+  phone         String?
+  location      String?
+  qualification String?
+  profilePicture String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  participantProfile    ParticipantProfile?
+  judgeProfile          JudgeProfile?
+  teamMemberships       TeamMember[]
+  ledTeams              Team[]                 @relation("TeamLeader")
+  challengeRegistrations ChallengeRegistration[]
+  hackathonRegistrations HackathonRegistration[]
+  submissions           Submission[]
+  judgeAssignments      JudgeAssignment[]
+  evaluations           Evaluation[]
+  peerReviewsGiven      PeerReview[]           @relation("PeerReviewer")
+  certificates          Certificate[]
+  badges                AchievementBadge[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]             @relation("AdminAudit")
+  votes                 Vote[]
+  complaintsAgainst     Complaint[]            @relation("ComplaintAgainst")
+  complaintsFiled       Complaint[]            @relation("ComplaintFiled")
+}
+
+model ParticipantProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  education     String?
+  experience    String?
+  skills        String[] @default([])
+  interests     String[] @default([])
+  portfolioUrl  String?
+  githubUrl     String?
+  linkedinUrl   String?
+  websiteUrl    String?
+  isPublic      Boolean  @default(true)
+  showBadges    Boolean  @default(true)
+}
+
+model JudgeProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String?
+  biography       String?
+  experienceYears Int?     @default(5)
+  qualifications  String?
+  experienceInfo  String?
+  expertiseTags   String[] @default([])
+  websiteUrl      String?
+  portfolioUrl    String?
+  linkedinUrl     String?
+  isApproved      Boolean  @default(false)
+}
+
+model ChallengeCategory {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  visibility  String      @default("Public")
+  challenges  Challenge[]
+}
+
+model Challenge {
+  id                 String          @id @default(cuid())
+  code               String          @unique
+  title              String
+  slug               String          @unique
+  categoryId         String?
+  category           ChallengeCategory? @relation(fields: [categoryId], references: [id])
+  categoryName       String          @default("UI/UX")
+  description        String
+  overview           String?
+  objectives         String[]        @default([])
+  eligibility        String?
+  rules              String?
+  status             ChallengeStatus @default(DRAFT)
+  durationType       DurationType    @default(DAILY)
+  durationDisplay    String          @default("24 hours")
+  registrationFee    Int             @default(149)
+  prizePool          String          @default("₹50,000")
+  participationType  String          @default("Solo or team of 2–4")
+  minTeamSize        Int             @default(1)
+  maxTeamSize        Int             @default(4)
+  registrationOpen   DateTime?
+  registrationClose  DateTime?
+  challengeStart     DateTime?
+  challengeEnd       DateTime?
+  submissionDeadline DateTime?
+  evaluationDeadline DateTime?
+  resultPublishDate  DateTime?
+  isPublished        Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  registrations      ChallengeRegistration[]
+  teams              Team[]
+  submissions        Submission[]
+  rubric             EvaluationRubric?
+  judgeAssignments   JudgeAssignment[]
+}
+
+model Hackathon {
+  id                 String          @id @default(cuid())
+  code               String          @unique
+  title              String
+  slug               String          @unique
+  categoryName       String          @default("General")
+  description        String
+  format             HackathonFormat @default(ONLINE)
+  venue              String?
+  status             ChallengeStatus @default(UPCOMING)
+  registrationFee    Int             @default(199)
+  prizePool          String          @default("Up to ₹10 lakh")
+  minTeamSize        Int             @default(2)
+  maxTeamSize        Int             @default(4)
+  registrationOpen   DateTime?
+  registrationClose  DateTime?
+  eventStart         DateTime?
+  eventEnd           DateTime?
+  submissionDeadline DateTime?
+  isPublished        Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  sessions           HackathonSession[]
+  registrations      HackathonRegistration[]
+  teams              Team[]
+  submissions        Submission[]
+  judgeAssignments   JudgeAssignment[]
+}
+
+model HackathonSession {
+  id          String    @id @default(cuid())
+  hackathonId String
+  hackathon   Hackathon @relation(fields: [hackathonId], references: [id], onDelete: Cascade)
+  title       String
+  sessionType String    @default("General")
+  timeDisplay String
+  order       Int       @default(0)
+}
+
+model Team {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  description   String?
+  leaderId      String
+  leader        User     @relation("TeamLeader", fields: [leaderId], references: [id])
+  challengeId   String?
+  challenge     Challenge? @relation(fields: [challengeId], references: [id])
+  hackathonId   String?
+  hackathon     Hackathon? @relation(fields: [hackathonId], references: [id])
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+
+  members       TeamMember[]
+  invitations   TeamInvitation[]
+  challengeRegistrations ChallengeRegistration[]
+  hackathonRegistrations HackathonRegistration[]
+  submissions   Submission[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("Member")
+  joinedAt  DateTime @default(now())
+
+  @@unique([teamId, userId])
+}
+
+model TeamInvitation {
+  id         String   @id @default(cuid())
+  teamId     String
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  email      String
+  status     String   @default("Pending")
+  createdAt  DateTime @default(now())
+}
+
+model ChallengeRegistration {
+  id           String             @id @default(cuid())
+  code         String             @unique
+  challengeId  String
+  challenge    Challenge          @relation(fields: [challengeId], references: [id])
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  teamId       String?
+  team         Team?              @relation(fields: [teamId], references: [id])
+  status       RegistrationStatus @default(APPROVED)
+  registeredAt DateTime           @default(now())
+}
+
+model HackathonRegistration {
+  id           String             @id @default(cuid())
+  code         String             @unique
+  hackathonId  String
+  hackathon    Hackathon          @relation(fields: [hackathonId], references: [id])
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  teamId       String?
+  team         Team?              @relation(fields: [teamId], references: [id])
+  status       RegistrationStatus @default(APPROVED)
+  registeredAt DateTime           @default(now())
+}
+
+model Submission {
+  id               String           @id @default(cuid())
+  code             String           @unique
+  title            String
+  shortDescription String?
+  detailedWriteup  String?
+  version          String           @default("v1")
+  status           SubmissionStatus @default(SUBMITTED)
+  challengeId      String?
+  challenge        Challenge?       @relation(fields: [challengeId], references: [id])
+  hackathonId      String?
+  hackathon        Hackathon?       @relation(fields: [hackathonId], references: [id])
+  userId           String
+  user             User             @relation(fields: [userId], references: [id])
+  teamId           String?
+  team             Team?            @relation(fields: [teamId], references: [id])
+  videoUrl         String?
+  githubUrl        String?
+  demoUrl          String?
+  publishedScore   Float?
+  publishedRank    Int?
+  publishedFeedback String?
+  hasReport        Boolean          @default(false)
+  reportReason     String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  files            SubmissionFile[]
+  evaluations      Evaluation[]
+  judgeAssignments JudgeAssignment[]
+  nominations      Nomination[]
+  peerReviews      PeerReview[]
+  resubmissionRequests ResubmissionRequest[]
+}
+
+model SubmissionFile {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileType     String
+  fileSize     String
+  fileUrl      String
+}
+
+model EvaluationRubric {
+  id          String                @id @default(cuid())
+  name        String
+  challengeId String?               @unique
+  challenge   Challenge?            @relation(fields: [challengeId], references: [id])
+  totalMarks  Int                   @default(100)
+  version     Int                   @default(1)
+  criteria    EvaluationCriterion[]
+  evaluations Evaluation[]
+}
+
+model EvaluationCriterion {
+  id            String           @id @default(cuid())
+  rubricId      String
+  rubric        EvaluationRubric @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  maxMarks      Int
+  weightPercent Int
+  scores        EvaluationScore[]
+}
+
+model JudgeAssignment {
+  id           String           @id @default(cuid())
+  judgeId      String
+  judge        User             @relation(fields: [judgeId], references: [id])
+  challengeId  String?
+  challenge    Challenge?       @relation(fields: [challengeId], references: [id])
+  hackathonId  String?
+  hackathon    Hackathon?       @relation(fields: [hackathonId], references: [id])
+  submissionId String?
+  submission   Submission?      @relation(fields: [submissionId], references: [id])
+  status       EvaluationStatus @default(PENDING_REVIEW)
+  deadline     DateTime?
+  assignedAt   DateTime         @default(now())
+}
+
+model Evaluation {
+  id               String           @id @default(cuid())
+  submissionId     String
+  submission       Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  judgeId          String
+  judge            User             @relation(fields: [judgeId], references: [id])
+  rubricId         String?
+  rubric           EvaluationRubric? @relation(fields: [rubricId], references: [id])
+  totalScore       Int              @default(0)
+  status           EvaluationStatus @default(DRAFT_SAVED)
+  feedback         String?
+  strengths        String?
+  improvementAreas String?
+  additionalNotes  String?
+  isReopened       Boolean          @default(false)
+  reopenedUntil    DateTime?
+  version          Int              @default(1)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  scores           EvaluationScore[]
+  revisions        EvaluationRevision[]
+
+  @@unique([submissionId, judgeId])
+}
+
+model EvaluationScore {
+  id           String              @id @default(cuid())
+  evaluationId String
+  evaluation   Evaluation          @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criterionId  String
+  criterion    EvaluationCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  score        Int                 @default(0)
+
+  @@unique([evaluationId, criterionId])
+}
+
+model EvaluationRevision {
+  id           String     @id @default(cuid())
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  version      Int
+  totalScore   Int
+  feedback     String?
+  submittedAt  DateTime   @default(now())
+}
+
+model AwardProgramme {
+  id              String          @id @default(cuid())
+  name            String
+  year            String          @default("2026")
+  description     String?
+  nominationsOpen DateTime?
+  judgingDates    String?
+  resultsDate     String?
+  status          String          @default("Open")
+  categories      AwardCategory[]
+}
+
+model AwardCategory {
+  id             String          @id @default(cuid())
+  programmeId    String
+  programme      AwardProgramme  @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  judgingType    String          @default("Judged")
+  nomineeLimit   Int             @default(12)
+  isPublicVoting Boolean         @default(false)
+  status         String          @default("Nominees published")
+  nominations    Nomination[]
+  votingCampaigns VotingCampaign[]
+  votes          Vote[]
+}
+
+model Nomination {
+  id             String           @id @default(cuid())
+  categoryId     String
+  category       AwardCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  submissionId   String?
+  submission     Submission?      @relation(fields: [submissionId], references: [id])
+  nomineeTitle   String
+  nomineeName    String
+  description    String?
+  source         String           @default("Admin")
+  status         NominationStatus @default(SHORTLISTED)
+  recommendedAs  String?
+  recommendNotes String?
+  voteCount      Int              @default(0)
+  createdAt      DateTime         @default(now())
+
+  votes          Vote[]
+  winner         Winner?
+}
+
+model VotingCampaign {
+  id          String        @id @default(cuid())
+  title       String
+  categoryId  String
+  category    AwardCategory @relation(fields: [categoryId], references: [id])
+  startDate   DateTime?
+  endDate     DateTime?
+  status      String        @default("Live")
+  votes       Vote[]
+}
+
+model Vote {
+  id               String         @id @default(cuid())
+  campaignId       String?
+  campaign         VotingCampaign? @relation(fields: [campaignId], references: [id])
+  categoryId       String?
+  category         AwardCategory?  @relation(fields: [categoryId], references: [id])
+  nominationId     String
+  nomination       Nomination     @relation(fields: [nominationId], references: [id], onDelete: Cascade)
+  voterEmail       String
+  userId           String?
+  user             User?          @relation(fields: [userId], references: [id])
+  verificationCode String?
+  isVerified       Boolean        @default(true)
+  ipAddress        String?
+  createdAt        DateTime       @default(now())
+
+  @@unique([voterEmail, nominationId])
+  @@unique([userId, categoryId])
+}
+
+model Winner {
+  id           String     @id @default(cuid())
+  nominationId String     @unique
+  nomination   Nomination @relation(fields: [nominationId], references: [id], onDelete: Cascade)
+  year         String     @default("2026")
+  placement    String     @default("Winner")
+  publishedAt  DateTime   @default(now())
+}
+
+model CertificateTemplate {
+  id         String   @id @default(cuid())
+  name       String
+  type       String   @default("Challenge")
+  fieldsJson String?
+}
+
+model Certificate {
+  id           String            @id @default(cuid())
+  code         String            @unique
+  recipientId  String
+  recipient    User              @relation(fields: [recipientId], references: [id])
+  recipientName String
+  awardTitle   String
+  eventName    String
+  certType     String            @default("Winner")
+  status       CertificateStatus @default(ACTIVE)
+  issuedAt     DateTime          @default(now())
+}
+
+model AchievementBadge {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  badgeType   String   @default("Participation")
+  icon        String   @default("★")
+  description String?
+  awardedAt   DateTime @default(now())
+}
+
+model PeerReview {
+  id               String     @id @default(cuid())
+  submissionId     String
+  submission       Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewerId       String
+  reviewer         User       @relation("PeerReviewer", fields: [reviewerId], references: [id])
+  usabilityRating  Int        @default(3)
+  visualRating     Int        @default(3)
+  originalityRating Int       @default(3)
+  feedback         String?
+  status           String     @default("Submitted")
+  createdAt        DateTime   @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("info")
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  admin     User     @relation("AdminAudit", fields: [adminId], references: [id])
+  adminName String
+  action    String
+  module    String
+  record    String
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model Complaint {
+  id            String   @id @default(cuid())
+  againstUserId String
+  againstUser   User     @relation("ComplaintAgainst", fields: [againstUserId], references: [id])
+  filedByUserId String
+  filedByUser   User     @relation("ComplaintFiled", fields: [filedByUserId], references: [id])
+  reason        String
+  status        String   @default("Review")
+  createdAt     DateTime @default(now())
+}
+
+model ResubmissionRequest {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  participant  String
+  reason       String
+  status       String     @default("Pending")
+  createdAt    DateTime   @default(now())
+}
